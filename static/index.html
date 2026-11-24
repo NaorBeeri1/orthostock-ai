@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrthoStock AI — מערכת ניהול מלאי ותפעול חכמה</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { background-color: #0b0f19; color: #e2e8f0; font-family: 'Heebo', system-ui, -apple-system, sans-serif; }
+    .prose table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.82rem; }
+    .prose th, .prose td { border: 1px solid #334155; padding: 0.45rem 0.65rem; text-align: right; }
+    .prose th { background-color: #1e293b; color: #93c5fd; }
+    .prose code { background-color: #1e293b; padding: 0.1rem 0.35rem; border-radius: 4px; color: #38bdf8; font-size: 0.82em; direction: ltr; display: inline-block; }
+    .prose ul { list-style-type: disc; padding-right: 1.25rem; margin: 0.5rem 0; }
+    .prose h3 { font-weight: 700; color: #f8fafc; margin-top: 0.9rem; margin-bottom: 0.35rem; font-size: 0.95rem; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shrink-0">O</div>
+      <div>
+        <h1 class="font-semibold text-white text-base leading-tight">
+          OrthoStock AI
+          <span class="inline-block whitespace-nowrap text-xs font-normal text-blue-400 mr-2 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">סוכן AI מבוסס כלים</span>
+        </h1>
+        <p class="text-xs text-slate-400">עוזר תפעול ומלאי רב-סניפי לאורטופדיה והנעלה (FastAPI + SQLite + Gemini)</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4 text-xs text-slate-400 shrink-0">
+      <span id="db-status" class="flex items-center gap-1.5 whitespace-nowrap"><span class="h-2 w-2 rounded-full bg-emerald-400"></span> מחובר ל-SQLite</span>
+      <a href="/docs" target="_blank" class="text-blue-400 hover:underline whitespace-nowrap">תיעוד API (Swagger) ↗</a>
+    </div>
+  </header>
+
+  <!-- Main Split Layout -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+
+    <!-- Right-side in RTL: Live Database State (5 cols) -->
+    <section class="lg:col-span-5 border-l border-slate-800 flex flex-col overflow-hidden bg-slate-950/40">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400">מלאי חי בסניפים (SQLite)</h2>
+        <button onclick="loadInventory()" class="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap">↻ רענן נתונים</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-6">
+        <!-- Stock Table -->
+        <div class="overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-xs text-right">
+            <thead class="bg-slate-900 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-2 px-3">מק״ט / מוצר</th>
+                <th class="py-2 px-2 text-center whitespace-nowrap" title="סניף ראשון לציון">ראשל״צ</th>
+                <th class="py-2 px-2 text-center whitespace-nowrap" title="סניף רמת גן">רמת גן</th>
+                <th class="py-2 px-2 text-center whitespace-nowrap" title="סניף פתח תקווה">פ״ת</th>
+                <th class="py-2 px-3 text-left whitespace-nowrap">סטטוס מלאי</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-tbody" class="divide-y divide-slate-800/70"></tbody>
+          </table>
+        </div>
+
+        <!-- Purchase Orders Table -->
+        <div>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">הזמנות רכש מספקים</h3>
+          <div class="overflow-x-auto rounded-lg border border-slate-800">
+            <table class="w-full text-xs text-right">
+              <thead class="bg-slate-900 text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="py-2 px-3 whitespace-nowrap">מס׳ הזמנה</th>
+                  <th class="py-2 px-2 whitespace-nowrap">מק״ט</th>
+                  <th class="py-2 px-2 text-center whitespace-nowrap">כמות</th>
+                  <th class="py-2 px-2 whitespace-nowrap">סניף יעד</th>
+                  <th class="py-2 px-3 text-left whitespace-nowrap">סטטוס</th>
+                </tr>
+              </thead>
+              <tbody id="po-tbody" class="divide-y divide-slate-800/70"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Left-side in RTL: AI Copilot & Tool Trace (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col overflow-hidden">
+      <!-- Chat Messages -->
+      <div id="chat-box" class="flex-1 overflow-y-auto p-5 space-y-4">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 text-sm text-slate-300">
+          <p class="font-medium text-white mb-1">ברוכים הבאים ל-OrthoStock AI — עוזר התפעול והמלאי.</p>
+          <p class="text-xs text-slate-400 mb-3">ניתן לשאול על זמינות נעלי HOKA, בלנדסטון וחגורות באוארפיינד בסניפים, לבדוק משלוחים שבדרך, לחשב עלות הזמנה סיטונאית בש״ח, או להפיק טיוטת הזמנת רכש לאישור מנהל. כל תשובה חושפת את לוג הרצת הכלים מאחורי הקלעים.</p>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="sendPreset(this.innerText)" class="text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 px-3 py-1.5 rounded-lg border border-slate-700 transition text-right">אילו נעליים או אביזרים אורטופדיים נמצאים במלאי נמוך, והאם כבר יש הזמנות בדרך?</button>
+            <button onclick="sendPreset(this.innerText)" class="text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 px-3 py-1.5 rounded-lg border border-slate-700 transition text-right">חשב עלות הזמנה מחדש ל-15 זוגות של SHOE-HOKA-KAHA2</button>
+            <button onclick="sendPreset(this.innerText)" class="text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 px-3 py-1.5 rounded-lg border border-slate-700 transition text-right">צור טיוטת הזמנת רכש ל-10 יחידות של SUPP-RHIZ-LOC לסניף רמת גן</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Bar -->
+      <form id="chat-form" class="p-4 border-t border-slate-800 bg-slate-900/60 flex gap-3">
+        <input
+          id="chat-input"
+          type="text"
+          placeholder="שאל את OrthoStock AI (לדוגמה: 'בדוק מלאי הוקה ברמת גן והפק טיוטת הזמנה ל-8 זוגות')..."
+          class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+          required
+        />
+        <button
+          id="send-btn"
+          type="submit"
+          class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition whitespace-nowrap"
+        >
+          שלח
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const chatHistory = [];
+
+    const BRANCH_HEB = {
+      'BR-RLZ': 'ראשל״צ',
+      'BR-RMG': 'רמת גן',
+      'BR-PTK': 'פתח תקווה'
+    };
+
+    const STATUS_HEB = {
+      'IN_TRANSIT': 'בדרך לסניף',
+      'PENDING_APPROVAL': 'ממתין לאישור',
+      'DELIVERED': 'נמסר'
+    };
+
+    async function loadInventory() {
+      const res = await fetch('/inventory');
+      const data = await res.json();
+
+      const invBody = document.getElementById('inventory-tbody');
+      invBody.innerHTML = data.products.map(p => {
+        const isLow = p.total_stock <= p.reorder_point;
+        const badge = isLow
+          ? `<span class="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800/70">נמוך (${p.total_stock}/${p.reorder_point})</span>`
+          : `<span class="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/70">תקין (${p.total_stock})</span>`;
+        return `
+          <tr class="hover:bg-slate-900/50">
+            <td class="py-2 px-3">
+              <div dir="ltr" class="font-mono text-blue-400 text-right whitespace-nowrap">${p.sku}</div>
+              <div class="text-slate-300 text-[11px]">${p.name}</div>
+            </td>
+            <td class="py-2 px-2 text-center font-mono ${p.rlz_stock === 0 ? 'text-rose-400 font-bold' : ''}">${p.rlz_stock}</td>
+            <td class="py-2 px-2 text-center font-mono ${p.rmg_stock === 0 ? 'text-rose-400 font-bold' : ''}">${p.rmg_stock}</td>
+            <td class="py-2 px-2 text-center font-mono ${p.ptk_stock === 0 ? 'text-rose-400 font-bold' : ''}">${p.ptk_stock}</td>
+            <td class="py-2 px-3 text-left">${badge}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const poBody = document.getElementById('po-tbody');
+      poBody.innerHTML = data.purchase_orders.map(o => {
+        const statusColor = o.status === 'IN_TRANSIT'
+          ? 'text-sky-400 bg-sky-950 border-sky-800'
+          : 'text-amber-400 bg-amber-950 border-amber-800';
+        const statusText = STATUS_HEB[o.status] || o.status;
+        const branchText = BRANCH_HEB[o.warehouse_id] || o.warehouse_id;
+        return `
+          <tr class="hover:bg-slate-900/50">
+            <td dir="ltr" class="py-2 px-3 font-mono text-slate-200 text-right whitespace-nowrap">${o.po_number}</td>
+            <td dir="ltr" class="py-2 px-2 font-mono text-blue-400 text-right whitespace-nowrap">${o.sku}</td>
+            <td class="py-2 px-2 text-center font-mono">${o.quantity}</td>
+            <td class="py-2 px-2 text-slate-300 whitespace-nowrap">${branchText}</td>
+            <td class="py-2 px-3 text-left"><span class="inline-block whitespace-nowrap px-2 py-0.5 rounded border text-[11px] ${statusColor}">${statusText}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function appendMessage(role, htmlContent, trace = null, metrics = null) {
+      const box = document.getElementById('chat-box');
+      const wrapper = document.createElement('div');
+
+      if (role === 'user') {
+        wrapper.className = 'flex justify-start';
+        wrapper.innerHTML = `<div class="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm max-w-xl">${htmlContent}</div>`;
+      } else {
+        let traceHtml = '';
+        if (trace && trace.length > 0) {
+          const steps = trace.map((t, idx) => `
+            <div dir="ltr" class="border-t border-slate-800 pt-2 mt-2 text-left">
+              <div class="flex justify-between text-[11px] font-mono text-emerald-400">
+                <span>#${idx + 1} ${t.tool}(${JSON.stringify(t.arguments)})</span>
+                <span class="text-slate-500">${t.duration_ms} ms</span>
+              </div>
+              <pre class="mt-1 p-2 rounded bg-slate-950 text-[11px] text-slate-300 overflow-x-auto max-h-36">${JSON.stringify(t.output, null, 2)}</pre>
+            </div>
+          `).join('');
+
+          traceHtml = `
+            <details class="mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 text-xs">
+              <summary class="cursor-pointer text-blue-400 select-none font-medium">
+                ⚙ הצג לוג הרצת כלים (Agent Trace) — ${trace.length} קריאות • ${metrics.total_latency_ms} ms • ${metrics.total_tokens} טוקנים
+              </summary>
+              ${steps}
+            </details>
+          `;
+        }
+
+        wrapper.className = 'flex justify-end';
+        wrapper.innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-200 max-w-3xl w-full">
+            <div class="prose max-w-none">${htmlContent}</div>
+            ${traceHtml}
+          </div>
+        `;
+      }
+
+      box.appendChild(wrapper);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function sendPreset(text) {
+      document.getElementById('chat-input').value = text;
+      document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    }
+
+    document.getElementById('chat-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const btn = document.getElementById('send-btn');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      appendMessage('user', msg);
+      input.value = '';
+      btn.disabled = true;
+      btn.innerText = 'חושב...';
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, history: chatHistory }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          appendMessage('model', `<span class="text-rose-400">שגיאה: ${data.detail || 'הבקשה נכשלה'}</span>`);
+        } else {
+          chatHistory.push({ role: 'user', content: msg });
+          chatHistory.push({ role: 'model', content: data.reply });
+          appendMessage('model', marked.parse(data.reply), data.tool_trace, data.metrics);
+          await loadInventory();
+        }
+      } catch (err) {
+        appendMessage('model', `<span class="text-rose-400">שגיאת רשת: ${err.message}</span>`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'שלח';
+      }
+    });
+
+    loadInventory();
+  </script>
+</body>
+</html>
